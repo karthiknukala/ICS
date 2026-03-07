@@ -1,0 +1,276 @@
+#!/bin/sh
+set -eu
+
+die(){ echo "configure: error: $*" >&2; exit 1; }
+warn(){ echo "configure: warning: $*" >&2; }
+have(){ command -v "$1" >/dev/null 2>&1; }
+
+find_ocaml_pkg_dir() {
+  pkg="$1"
+  fallback="$2"
+  if have ocamlfind; then
+    if ocamlfind query "$pkg" >/dev/null 2>&1; then
+      ocamlfind query "$pkg"
+      return 0
+    fi
+  fi
+  if [ -n "${OCAMLSTDLIB:-}" ] && [ -d "$OCAMLSTDLIB/$fallback" ]; then
+    printf '%s\n' "$OCAMLSTDLIB/$fallback"
+    return 0
+  fi
+  if [ -n "${OCAML_LIBROOT:-}" ] && [ -d "$OCAML_LIBROOT/$fallback" ]; then
+    printf '%s\n' "$OCAML_LIBROOT/$fallback"
+    return 0
+  fi
+  return 1
+}
+
+fix_makefile_text() {
+  f="$1"
+  [ -f "$f" ] || return 0
+  perl -i -pe 's/\r$//' "$f"
+  perl -i -pe '
+    if (/^\s*(OCAMLSTDLIB)\s*=\s*`(.+)`\s*$/) { $_="$1 := \$(shell $2)\n"; }
+    if (/^\s*(LIBGCCA)\s*=\s*`(.+)`\s*$/)     { $_="$1 := \$(shell $2)\n"; }
+    if (/^\s*(LIBCPP)\s*=\s*`(.+)`\s*$/)      { $_="$1 := \$(shell $2)\n"; }
+  ' "$f"
+}
+
+substitute_file() {
+  in="$1"; out="$2"
+
+  perl -pe '
+    my %S = (
+      "prefix"      => $ENV{CFG_prefix},
+      "exec_prefix" => $ENV{CFG_exec_prefix},
+      "bindir"      => $ENV{CFG_bindir},
+      "libdir"      => $ENV{CFG_libdir},
+      "includedir"  => $ENV{CFG_includedir},
+      "OCAMLSTDLIB" => $ENV{CFG_OCAMLSTDLIB},
+      "OCAML_STRDIR"=> $ENV{CFG_OCAML_STRDIR},
+      "OCAML_NUMDIR"=> $ENV{CFG_OCAML_NUMDIR},
+
+      "SHELL"       => $ENV{CFG_SHELL},
+      "SED"         => $ENV{CFG_SED},
+      "AR"          => $ENV{CFG_AR},
+      "RANLIB"      => $ENV{CFG_RANLIB},
+      "CC"          => $ENV{CFG_CC},
+      "CXX"         => $ENV{CFG_CXX},
+
+      "OCAMLC"      => $ENV{CFG_OCAMLC},
+      "OCAMLOPT"    => $ENV{CFG_OCAMLOPT},
+      "OCAMLMKTOP"  => $ENV{CFG_OCAMLMKTOP},
+      "OCAMLMKLIB"  => $ENV{CFG_OCAMLMKLIB},
+      "OCAMLDEP"    => $ENV{CFG_OCAMLDEP},
+      "OCAMLLEX"    => $ENV{CFG_OCAMLLEX},
+      "OCAMLYACC"   => $ENV{CFG_OCAMLYACC},
+      "OCAMLDOC"    => $ENV{CFG_OCAMLDOC},
+
+      "CFLAGS"      => $ENV{CFG_CFLAGS},
+      "CXXFLAGS"    => $ENV{CFG_CXXFLAGS},
+      "CPPFLAGS"    => $ENV{CFG_CPPFLAGS},
+      "LDFLAGS"     => $ENV{CFG_LDFLAGS},
+      "LIBS"        => $ENV{CFG_LIBS},
+      "MINUS_L_LIBS"=> $ENV{CFG_MINUS_L_LIBS},
+      "SHLIB_EXT"   => $ENV{CFG_SHLIB_EXT},
+      "SHLIB_LDFLAGS" => $ENV{CFG_SHLIB_LDFLAGS},
+      "CXXSTDLIB"   => $ENV{CFG_CXXSTDLIB},
+
+      "ICSPATH"     => $ENV{CFG_ICSPATH},
+      "posixos"     => $ENV{CFG_posixos},
+      "SET_MAKE"    => $ENV{CFG_SET_MAKE},
+
+      "ECHO_T"      => "\t",
+      "ECHO_N"      => "-n",
+      "ECHO_C"      => "\\c",
+    );
+    s/\@([A-Za-z0-9_]+)\@/exists $S{$1} ? $S{$1} : $&/ge;
+  ' "$in" >"$out"
+
+  case "$out" in
+    *Makefile) fix_makefile_text "$out" ;;
+  esac
+}
+
+# ---- args ----
+with_icspath=""
+with_cxx=""
+prefix="/usr/local"
+exec_prefix='${prefix}'
+bindir='${exec_prefix}/bin'
+libdir='${exec_prefix}/lib'
+includedir='${prefix}/include'
+
+for arg in "$@"; do
+  case "$arg" in
+    --with-icspath=*) with_icspath="${arg#*=}" ;;
+    --with-cxx=*) with_cxx="${arg#*=}" ;;
+    --prefix=*) prefix="${arg#*=}" ;;
+    --exec-prefix=*) exec_prefix="${arg#*=}" ;;
+    -h|--help)
+      echo 'Usage: ./configure [--prefix=DIR] [--exec-prefix=DIR] [--with-icspath=DIR] [--with-cxx=CXX]'
+      exit 0
+      ;;
+    *) die "unrecognized option: $arg" ;;
+  esac
+done
+
+# ---- icspath ----
+if [ -n "$with_icspath" ]; then ICSPATH="$with_icspath"; else ICSPATH="$(pwd)"; fi
+[ -f "$ICSPATH/ics.in" ] || die "Invalid ICS path (missing $ICSPATH/ics.in)"
+
+# ---- tools ----
+: "${CFG_SHELL:=/bin/sh}"
+: "${SED:=sed}"
+: "${AR:=ar}"
+: "${RANLIB:=ranlib}"
+
+have "$SED" || die "cannot find sed"
+
+if [ -n "${CC:-}" ]; then :; else
+  if have clang; then CC=clang
+  elif have gcc; then CC=gcc
+  else die "no acceptable C compiler found"
+  fi
+fi
+
+if [ -n "$with_cxx" ]; then
+  CXX="$with_cxx"
+else
+  if have clang++; then CXX=clang++
+  elif have g++; then CXX=g++
+  else CXX="$CC"
+  fi
+fi
+
+: "${OCAMLC:=ocamlc}"
+: "${OCAMLOPT:=ocamlopt}"
+: "${OCAMLMKTOP:=ocamlmktop}"
+: "${OCAMLMKLIB:=ocamlmklib}"
+: "${OCAMLDEP:=ocamldep}"
+: "${OCAMLLEX:=ocamllex}"
+: "${OCAMLYACC:=ocamlyacc}"
+: "${OCAMLDOC:=ocamldoc}"
+
+for t in "$OCAMLC" "$OCAMLOPT" "$OCAMLMKTOP" "$OCAMLMKLIB" "$OCAMLDEP" "$OCAMLLEX" "$OCAMLYACC"; do
+  have "$t" || die "Cannot find required tool: $t"
+done
+if ! have "$OCAMLDOC"; then OCAMLDOC=true; warn "Cannot find ocamldoc (not mandatory)"; fi
+
+OCAMLSTDLIB="$("$OCAMLC" -where)"
+OCAML_LIBROOT="$(dirname "$OCAMLSTDLIB")"
+OCAML_STRDIR="$(find_ocaml_pkg_dir str str || true)"
+OCAML_NUMDIR="$(find_ocaml_pkg_dir num num || true)"
+[ -n "$OCAML_STRDIR" ] || die "Cannot find the OCaml str library directory"
+[ -n "$OCAML_NUMDIR" ] || die "Cannot find the OCaml num library directory"
+
+# ---- flags ----
+CFLAGS="${CFLAGS:--O3 -DNDEBUG}"
+CXXFLAGS="${CXXFLAGS:--O3 -DNDEBUG}"
+CPPFLAGS="${CPPFLAGS:-}"
+LDFLAGS="${LDFLAGS:-}"
+LIBS="${LIBS:-}"
+
+# ---- OS tag ----
+posixos="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' || echo unknown)"
+SET_MAKE=""
+case "$posixos" in
+  darwin)
+    SHLIB_EXT="dylib"
+    SHLIB_LDFLAGS="-dynamiclib"
+    CXXSTDLIB="-lc++"
+    ;;
+  cygwin)
+    SHLIB_EXT="dll"
+    SHLIB_LDFLAGS="-shared"
+    CXXSTDLIB="-lstdc++"
+    ;;
+  *)
+    SHLIB_EXT="so"
+    SHLIB_LDFLAGS="-shared"
+    CXXSTDLIB="-lstdc++"
+    ;;
+esac
+
+# ---- MINUS_L_LIBS split (like original autoconf) ----
+MINUS_L_LIBS=""
+KEEP_LIBS=""
+for tok in $LIBS; do
+  case "$tok" in
+    -l*) MINUS_L_LIBS="$MINUS_L_LIBS $tok" ;;
+    *)   KEEP_LIBS="$KEEP_LIBS $tok" ;;
+  esac
+done
+# Keep both: Makefile may expect LIBS + MINUS_L_LIBS separately
+LIBS="$KEEP_LIBS"
+
+echo "checking icspath... $ICSPATH"
+echo "checking OS... $(uname -s 2>/dev/null || echo unknown)"
+echo "checking CC... $CC"
+echo "checking CXX... $CXX"
+echo "checking OCaml stdlib... $OCAMLSTDLIB"
+echo "checking OCaml str... $OCAML_STRDIR"
+echo "checking OCaml num... $OCAML_NUMDIR"
+
+# ---- export for substitution ----
+export CFG_prefix="$prefix"
+export CFG_exec_prefix="$exec_prefix"
+export CFG_bindir="$bindir"
+export CFG_libdir="$libdir"
+export CFG_includedir="$includedir"
+export CFG_OCAMLSTDLIB="$OCAMLSTDLIB"
+export CFG_OCAML_STRDIR="$OCAML_STRDIR"
+export CFG_OCAML_NUMDIR="$OCAML_NUMDIR"
+
+export CFG_SHELL="$CFG_SHELL"
+export CFG_SED="$SED"
+export CFG_AR="$AR"
+export CFG_RANLIB="$RANLIB"
+export CFG_CC="$CC"
+export CFG_CXX="$CXX"
+
+export CFG_OCAMLC="$OCAMLC"
+export CFG_OCAMLOPT="$OCAMLOPT"
+export CFG_OCAMLMKTOP="$OCAMLMKTOP"
+export CFG_OCAMLMKLIB="$OCAMLMKLIB"
+export CFG_OCAMLDEP="$OCAMLDEP"
+export CFG_OCAMLLEX="$OCAMLLEX"
+export CFG_OCAMLYACC="$OCAMLYACC"
+export CFG_OCAMLDOC="$OCAMLDOC"
+
+export CFG_CFLAGS="$CFLAGS"
+export CFG_CXXFLAGS="$CXXFLAGS"
+export CFG_CPPFLAGS="$CPPFLAGS"
+export CFG_LDFLAGS="$LDFLAGS"
+export CFG_LIBS="$LIBS"
+export CFG_MINUS_L_LIBS="$MINUS_L_LIBS"
+export CFG_SHLIB_EXT="$SHLIB_EXT"
+export CFG_SHLIB_LDFLAGS="$SHLIB_LDFLAGS"
+export CFG_CXXSTDLIB="$CXXSTDLIB"
+
+export CFG_ICSPATH="$ICSPATH"
+export CFG_posixos="$posixos"
+export CFG_SET_MAKE="$SET_MAKE"
+
+# ---- instantiate ----
+targets="Makefile chameleon/Makefile sat/Makefile sat/src/Makefile install.sh BIN-INSTALL ics"
+for t in $targets; do
+  if [ -f "$t.in" ]; then
+    d="$(dirname "$t")"
+    [ "$d" = "." ] || mkdir -p "$d"
+    substitute_file "$t.in" "$t"
+    echo "created $t (from $t.in)"
+  fi
+done
+
+[ -f ics ] && chmod +x ics 2>/dev/null || true
+
+# ---- fail fast if placeholders remain ----
+if grep -nE '@[A-Za-z0-9_]+@' Makefile >/dev/null 2>&1; then
+  echo "configure: error: unexpanded @VAR@ placeholders remain in Makefile:" >&2
+  grep -nE '@[A-Za-z0-9_]+@' Makefile | head -50 >&2
+  exit 1
+fi
+
+echo "configure: success."
+exit 0

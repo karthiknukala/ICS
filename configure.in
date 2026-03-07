@@ -1,0 +1,156 @@
+dnl ICS autoconf input
+
+dnl make sure we are using a recent autoconf version
+AC_PREREQ([2.72])
+
+dnl If it doesn't look like GNU Make is being used, give a friendly warning
+tem=`make --version -f /dev/null 2>&1 | grep GNU`
+if test "x$tem" = "x"; then
+  AC_MSG_WARN([You need to use GNU Make when compiling])
+fi
+
+dnl begin
+AC_INIT
+AC_CONFIG_SRCDIR([src/ics.mli])
+
+AC_PREFIX_DEFAULT(/usr)
+
+dnl optionally give path, otherwise use cwd
+AC_MSG_CHECKING(icspath)
+AC_ARG_WITH(icspath, [  --with-icspath=/path/to/ics ])
+if test "x$with_icspath" = "x"; then
+  ICSPATH=`pwd`
+else
+  ICSPATH=$with_icspath
+fi
+if ! test -f $ICSPATH/ics.in; then
+  AC_MSG_ERROR(Invalid ICS path)
+fi
+AC_MSG_RESULT($ICSPATH)
+AC_SUBST(ICSPATH)
+
+AC_ARG_WITH(cxx, [  --with-cxx=g++          Specify a C++ compiler to be used],
+if test -n "$withval"; then
+	 CXX="$withval"
+fi)
+
+dnl Check for programs
+
+AC_PROG_CPP
+AC_PROG_CC(gcc)
+AC_PROG_CXX(g++)
+AC_PROG_MAKE_SET
+AC_PROG_RANLIB
+AC_CHECK_PROG(AR, ar, ar) 
+# are on AIX needs to know the object file format
+case "$target" in
+  powerpc64*-*-aix*)
+    AR="$AR -X 64"
+    ;;
+esac   
+
+dnl Check for OCaml programs
+AC_CHECK_PROG(OCAMLC,ocamlc,ocamlc,no)
+if test "$OCAMLC" = no ; then
+	AC_MSG_ERROR(Cannot find ocamlc.)
+fi
+	
+AC_MSG_CHECKING(for $OCAMLC version)
+ocamlc_version=`$OCAMLC -v | sed -e 's,[[^0-9.]],,g'`
+maj_ocamlc_version=`echo $ocamlc_version | cut -d. -f 1`
+min_ocamlc_version=`echo $ocamlc_version | cut -d. -f 2`
+if test $maj_ocamlc_version -lt 3 -o \( $maj_ocamlc_version -eq 3 -a $min_ocamlc_version -lt 4 \); then
+   AC_MSG_ERROR(Wrong version of $OCAMLC: $ocamlc_version - need at least 3.04)
+else
+   AC_MSG_RESULT($ocamlc_version)
+fi
+				
+AC_CHECK_PROG(OCAMLOPT,ocamlopt,ocamlopt,no)
+if test "$OCAMLOPT" = no ; then
+	AC_MSG_ERROR(Cannot find ocamlopt.)
+fi
+AC_CHECK_PROG(OCAMLMKTOP,ocamlmktop,ocamlmktop,no)
+if test "$OCAMLMKTOP" = no ; then
+	AC_MSG_ERROR(Cannot find ocamlmktop.)
+fi
+AC_CHECK_PROG(OCAMLDEP,ocamldep,ocamldep,no)
+if test "$OCAMLDEP" = no ; then
+	AC_MSG_ERROR(Cannot find ocamldep.)
+fi
+AC_CHECK_PROG(OCAMLLEX,ocamllex,ocamllex,no)
+if test "$OCAMLLEX" = no ; then
+	AC_MSG_ERROR(Cannot find ocamllex.)
+fi
+AC_CHECK_PROG(OCAMLYACC,ocamlyacc,ocamlyacc,no)
+if test "$OCAMLYACC" = no ; then
+	AC_MSG_ERROR(Cannot find ocamlyacc.)
+fi
+
+AC_CHECK_PROG(OCAMLDOC,ocamldoc,ocamldoc,true)
+if test "$OCAMLDOC" = true ; then
+	AC_MSG_WARN(Cannot find ocamldoc -- but not mandatory, since only used for generating documentation.)
+fi
+
+AC_CHECK_PROG(OCAMLMKLIB,ocamlmklib,ocamlmklib,no)
+if test "$OCAMLMKLIB" = no ; then
+	AC_MSG_ERROR(Cannot find ocamlmklib.)
+fi
+
+AC_SUBST(SHELL)
+AC_CHECK_PROG(SHELL,[bash --version],bash,no)
+if test "$SHELL" = no; then
+	 AC_MSG_ERROR([Cannot find the program (shell) `bash'.])
+fi
+
+AC_SUBST(SED)
+AC_CHECK_PROG(SED,[sed --version],sed,no)
+if test "$SED" = no; then
+	 AC_MSG_ERROR([Cannot find the program `sed'.])
+fi
+
+
+dnl Optional platform-specific libraries
+AC_SUBST(posixos)
+posixos=`./os`
+if test "$posixos" = "sunos"; then
+	 AC_CHECK_LIB(socket, htonl, LIBS="-lsocket $LIBS", AC_MSG_ERROR([*** SOCKET library not found. ***]))
+fi
+
+dnl SET ICS_CYGWIN define when cygwin
+if test "$posixos" = "cygwin"; then
+  CPPFLAGS="-DICS_CYGWIN $CPPFLAGS"
+fi
+
+
+dnl OCAML requires the libraries specified using -l to be inside -ccopt
+olibs=$LIBS
+LIBS=""
+AC_SUBST(MINUS_L_LIBS)
+MINUS_L_LIBS=""
+for curr_lib in $olibs; do 
+  prefix=`echo $curr_lib | cut -c -2`
+  if test "$prefix" = "-l"; then
+		MINUS_L_LIBS="$MINUS_L_LIBS $curr_lib"
+  else
+    LIBS="$LIBS $curr_lib"
+  fi
+done
+
+dnl UPDATE Flags
+if test -n "$CDEBUGFLAG"; then
+  CFLAGS="$CDEBUGFLAG"
+	CXXFLAGS="$CDEBUGFLAG"
+else
+	CFLAGS="-O3 -DNDEBUG"
+	CXXFLAGS="-O3 -DNDEBUG"
+fi				
+
+dnl Turn off warning messages for deprecated C++ features
+gxx_major=`$CXX --version | sed -e '2,$d' | sed -e 's/[[^0-9\.]]//g' | sed -e 's/[[\.]][[\.]]*/\./g' | sed -e 's/^\.//g' | sed -e 's/\.$//g' | awk -F . '{print $1}'`
+if test $gxx_major -ge 3; then CXXFLAGS="-Wno-deprecated $CXXFLAGS"; fi
+
+dnl Finally create all the generated files
+AC_CONFIG_FILES([Makefile chameleon/Makefile ics sat/Makefile sat/src/Makefile install.sh BIN-INSTALL])
+AC_OUTPUT
+
+chmod a+x ics

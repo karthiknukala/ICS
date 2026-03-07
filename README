@@ -1,0 +1,94 @@
+ICS 2.1: Integrated Canonizer and Solver
+========================================
+
+Ground decision procedure for the combination of
+theories based on Shostak's procedure. See also:
+
+http://ics.csl.sri.com
+
+
+Open Source Status:
+-------------------
+
+This source tree no longer depends on proprietary license files,
+signatures, certificates, or OpenSSL-based license checks to build or run.
+
+Add a top-level `LICENSE` file separately to define redistribution terms
+for this release.
+
+
+Requirements:
+-------------
+
+To compile ICS, you need to install first:
+ 
+ - Objective Caml version 3.06 or later
+   Available at http://caml.inria.fr
+
+
+
+Installation from sources  
+-------------------------
+
+ICS can be built from sources using the following 
+sequence of shell commands in a directory of your 
+choice.
+
+       $ tar zxvf ics-2-1.tar.gz
+       $ cd ics-2-1
+
+An executable is build using the the commands.
+    
+      $ ./configure [--prefix=/path/to/binaries]
+      $ make
+
+'configure' creates the Makefile from corresponding file Makefile.in,
+whereas 'make' builds ICS. 
+
+Binaries will be in ./bin/$(ARCH)/ 
+Libraries in ./lib/$(ARCH)/
+Build directory is ./obj/$(ARCH)/
+Documentation is in ./doc
+
+Now, the ICS interactor is called using
+
+     $ ./ics
+
+The executables and libraries can be installed in /path/to/binaries using
+
+     $ make install
+
+
+
+Problems
+--------
+
+Configure does not find required programs. 
+In this case check your PATH variable.
+
+
+Credits
+--------
+
+Main code by Harald Ruess and Leonardo de Moura with help from
+Sam Owre and N. Shankar.
+
+
+Changes: 
+--------
+
+Version 2.1
+  - mainly speed improvements
+  - several bug fixes for array theory and disequalities of integers
+  - removal of GMP
+  - more efficient parsing of propositional formulas
+
+Version 2.0
+  - to do
+
+Version 1.1 
+  - more efficient inequality reasoning
+  - support for extensional arrays
+  - updated list solver
+
+

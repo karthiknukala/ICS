@@ -1,0 +1,98 @@
+(*
+ * Legacy proprietary license boilerplate removed for the open-source release.
+ *)
+
+(** Logical contexts
+
+  @author Harald Ruess
+*)
+
+(** A {b logical context} is simply a conjunction [ctxt] of atoms.  When atoms 
+  are added to a logical context, the following datastructures are maintained.
+  - A {b partitioning} [p] of type {!Partition.t} consisting of variable 
+    equalities, variable disequalities, and variable constraints.
+  - A {b solution set} for every equality theory defined in {!Th}. 
+  - An upper bound on the indices of all fresh variables in all the data
+    structures above.
+*)
+
+type t
+  (** Representation of logical contexts. *)
+
+(** Pretty-printing mode for processing. *)
+module Mode : sig
+  type t = Context | Internals | None
+  val value : t ref
+  val set : t -> ('a -> 'b) -> 'a -> 'b
+end 
+
+
+val pp : t Pretty.printer
+  (** Pretty-printing the context of a state. *)
+
+val eq : t -> t -> bool
+  (** Identity test on contexts. *)
+
+val empty : t
+  (** The empty logical context *)
+
+val ctxt_of : t -> Atom.t list
+  (** [ctxt_of s] returns the logical context of [s] as a list of atoms. *)
+
+val partition_of : t -> Partition.t
+  (** [p_of s] returns the partitioning associated with [s]. *)
+
+val eqs_of : t -> Combine.E.t
+
+val config_of : t -> Combine.E.t * Partition.t
+
+
+val upper_of : t -> int
+  (** [upper_of s] returns an upper bound on the indices of all fresh
+    variables in [s]. *)
+
+(** Result of processing. *)
+module Status : sig
+
+  type 'a t = 
+    | Valid of Jst.t
+    | Inconsistent of Jst.t
+    | Ok of 'a
+
+  val pp : 'a Pretty.printer -> 'a t Pretty.printer
+
+end
+
+
+val add : t -> Atom.t -> t Status.t
+  (** [process s a] extends the logical context [s] with an atom [a].
+    The return value is 
+    - [Valid] if [a] can be shown to be valid in [s],
+    - [Inconsistent] if [s] conjoined with [a] can be shown to be inconsistent, and 
+    - [Ok(s')] otherwise.  In this case, [s'] is a logical state equivalent 
+    to [s] conjoined with [a]. *)
+
+val statistics : bool ref
+val verbose : bool ref
+val coi_enabled : int ref
+val semantic_coi_min : int ref
+val syntactic_coi_min : int ref
+
+val addl : t -> Atom.t list -> t Status.t
+
+val is_inconsistent : t -> Atom.t list -> bool
+  (** [is_inconsistent s al] is [true] iff the conjunction of 
+    atoms in [al] is inconsistent in [s]. *)
+
+val is_valid : t -> Atom.t list -> bool
+  (** [is_valid s al] is [true] iff the conjunction of 
+    atoms in [al] is valid in [s]. *)
+
+val check_sat : t -> t option
+  (** [check_sat s] performs case-splitting and returns
+    - [Some(splits', s')] if there is a complete case-splitting path [splits']
+    yielding a satisfiable extension [s'] of [s].
+    - [None] if all case-splittinig paths yield an inconsistent context. *)
+
+val diff : t -> t -> t
+  (** Difference. *)
