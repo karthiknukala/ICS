@@ -1,0 +1,71 @@
+# /* Copyright (c) SRI International 2002. */
+SHELL=/bin/sh
+
+#### configuration part
+CC=clang
+CXX=clang++
+CFLAGS=-O3 -DNDEBUG
+CXXFLAGS=-O3 -DNDEBUG
+LDFLAGS=
+RANLIB=ranlib
+SED=sed
+posixos=darwin
+SHLIB_EXT=dylib
+SHLIB_LDFLAGS=-dynamiclib
+####
+
+ARCH := $(shell ../../config.guess)
+export ARCH
+
+LIB_DIR= ../lib/$(ARCH)
+OBJ_DIR= ../obj/$(ARCH)
+SED_OBJ_DIR=..\/obj\/$(ARCH)
+
+ICSAT= icsat.a
+
+SOURCES= LPFormula.cpp error.cpp ics_interface.cpp util.cpp safealloc.cpp UString.cpp \
+	 fmessage.cpp StringBuffer.cpp errormsg.cpp LPException.cpp fast-allocator.cpp LPSolver.cpp \
+         LPSolver_constraint_propagation.cpp LPSolver_branching.cpp LPSolver_backtrack.cpp LPSolver_invariants.cpp \
+         LPSolver_internalization.cpp \
+         LPSolver_conflict_resolution.cpp LPSolver_polarity_optimization.cpp LPSolver_implication_graph_optimization.cpp \
+         LPSolver_lookahead.cpp \
+	 ics_bridge.cpp
+
+### ics_interface.cpp
+
+OBJS= $(SOURCES:%.cpp=$(OBJ_DIR)/%.o)
+
+all: $(LIB_DIR) $(OBJ_DIR) $(LIB_DIR)/$(ICSAT)
+
+$(LIB_DIR):
+	mkdir -p $(LIB_DIR)
+
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
+
+$(LIB_DIR)/$(ICSAT): $(OBJS)
+	rm -f $(LIB_DIR)/$(ICSAT)
+	$(AR) scr $(LIB_DIR)/$(ICSAT) $(OBJS)
+	$(RANLIB) $(LIB_DIR)/$(ICSAT)
+
+.PHONY: icsat
+
+$(OBJ_DIR)/%.o : %.c
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+
+$(OBJ_DIR)/%.o : %.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+
+$(OBJ_DIR)/%.d: %.cpp
+	@echo Making dependency file \'$@\' ... 
+	@mkdir -p $(OBJ_DIR)
+	@$(SHELL) -ec '$(CXX) -MM $(CPPFLAGS) $< | $(SED) '\''s/\($*\)\.o[ :]*/$(SED_OBJ_DIR)\/\1.o $(SED_OBJ_DIR)\/\1.d : /g'\'' > $@; [ -s $@ ] || rm -f $@'
+	@$(SED) -e "s/msgs.h//g;s/consts.h//g" $@ > $@.DEP.TMP
+	@mv $@.DEP.TMP $@
+
+-include $(SOURCES:%.cpp=$(OBJ_DIR)/%.d)
+
+clean:
+	rm -f $(LIB_DIR)/$(ICSAT)
+	rm -f $(OBJ_DIR)/*
+	rm -f core

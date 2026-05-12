@@ -1,0 +1,553 @@
+### configuration part (done by ./configure) ###############################
+
+OCAMLSTDLIB = /Users/e35480/.opam/default/lib/ocaml
+OCAML_NUMDIR = /Users/e35480/.opam/default/lib/num
+
+CC = clang
+CXX = clang++
+
+OCAMLC   = ocamlc
+OCAMLLINK= ocamlmktop
+OCAMLOPT = ocamlopt
+OCAMLLEX = ocamllex
+OCAMLYACC= ocamlyacc
+OCAMLDEP = ocamldep
+OCAMLMKLIB = ocamlmklib
+OCAMLDOC = ocamldoc
+
+prefix = /usr/local
+exec_prefix = ${prefix}
+bindir = ${exec_prefix}/bin
+libdir = ${exec_prefix}/lib
+includedir = ${prefix}/include
+LDFLAGS=
+LIBS=
+MINUS_L_LIBS=
+CPPFLAGS=
+posixos=darwin
+SHLIB_EXT=dylib
+SHLIB_LDFLAGS=-dynamiclib
+CXXSTDLIB=-lc++
+
+### end of configuration part ###
+
+
+ifeq ($(MAKELEVEL),0)
+	ARCH := $(shell ./config.guess)
+        export ARCH
+	OBJDIR = ./obj/$(ARCH)
+	BINDIR = ./bin/$(ARCH)
+	LIBDIR = ./lib/$(ARCH)
+	SRCDIR = ./src
+        INCDIR = ./include
+	DOCDIR = ./doc
+	SATDIR = ./sat
+else
+	OBJDIR = .
+	BINDIR = ../../bin/$(ARCH)
+	LIBDIR = ../../lib/$(ARCH)
+	SRCDIR = ../../src
+	INCDIR = ../../include
+	DOCDIR = ../../doc
+	SATDIR = ../../sat
+endif
+
+
+### Version ###
+
+VERSION = 2.1.experimental
+DEBUG = 0
+
+
+### Compilation flags ###
+
+INCLUDE = -I +unix -I $(OCAML_NUMDIR)
+CFLAGS =
+BFLAGS = -g $(INCLUDE)
+
+ifeq ($(DEBUG),0)
+  OFLAGS = $(INCLUDE) -compact -inline 3 -noassert -unsafe
+else
+  OFLAGS = $(INCLUDE)	
+endif
+
+
+### Libraries ###
+
+LIBS_WITH_CCLIB=$(LIBS:%=-cclib %)
+
+MINUS_L_LIBS_WITH_CCLIB=$(MINUS_L_LIBS:%=-cclib %)
+LDFLAGS_WITH_CCLIB=$(LDFLAGS:%=-ccopt %)
+LDFLAGS_WITH_LDOPT=$(LDFLAGS:%=-ldopt %)
+CXXSTDLIB_WITH_CCLIB=$(CXXSTDLIB:%=-cclib %)
+CXXSTDLIB_WITH_LDOPT=$(CXXSTDLIB:%=-ldopt %)
+
+OCAMLLIBS= $(OCAMLSTDLIB)/libunix.a $(OCAML_NUMDIR)/libnums.a
+
+
+### Object files ###
+
+COBJS = ocaml-signals.o icsat.o icsversion.o
+
+OBJS = ics_all.o ics_stub.o $(COBJS)
+CMXALIB_OBJS = ics_stub.o $(COBJS)
+
+LISPERROROBJ = ics_lisp_error.o
+
+FOREIGNCMO = dynarray.cmo ptset.cmo ptmap.cmo rbset.cmo
+
+CORECMO = three.cmo \
+      mpa.cmo \
+      tools.cmo \
+      pretty.cmo \
+      version.cmo \
+      exc.cmo\
+      bitv.cmo \
+      dom.cmo \
+      name.cmo \
+      th.cmo \
+      trace.cmo \
+      sym.cmo \
+      var.cmo \
+      term.cmo \
+      atom.cmo \
+      jst.cmo \
+      euclid.cmo \
+      arith.cmo \
+      product.cmo \
+      coproduct.cmo \
+      bitvector.cmo \
+      propset.cmo \
+      boolean.cmo \
+      funarr.cmo \
+      acsym.cmo \
+      pprod.cmo \
+      apply.cmo \
+      app.cmo \
+      fact.cmo \
+      clause.cmo \
+      g.cmo \
+      d.cmo \
+      v.cmo \
+      partition.cmo \
+      solution.cmo \
+      infsys.cmo \
+      shostak.cmo \
+      can.cmo \
+      u.cmo \
+      ac.cmo \
+      arr.cmo \
+      la.cmo \
+      nl.cmo \
+      bv.cmo \
+      p.cmo \
+      pset.cmo \
+      l.cmo \
+      cop.cmo \
+      combine.cmo \
+      context.cmo \
+      prop.cmo
+
+CMO = $(FOREIGNCMO) \
+      $(CORECMO) \
+      symtab.cmo istate.cmo \
+      parser.cmo lexer.cmo \
+      ics.cmo
+
+CMI = $(CMO:.cmo=.cmi)
+
+CMX = $(CMO:.cmo=.cmx)
+
+SRCML = $(addprefix $(SRCDIR)/,$(CMO:.cmo=.ml))
+
+SRCMLI = $(addprefix $(SRCDIR)/,$(FOREIGNCMO:.cmo=.mli)) \
+         $(addprefix $(SRCDIR)/,$(CORECMO:.cmo=.mli))\
+         $(SRCDIR)/symtab.mli \
+         $(SRCDIR)/istate.mli \
+         $(SRCDIR)/ics.mli
+
+ICSAT= $(SATDIR)/lib/$(ARCH)/icsat.a
+
+CMXA = unix.cmxa \
+       nums.cmxa 
+
+CMA = $(CMXA:.cmxa=.cma)
+
+
+### Top level ###
+
+SHLIB_TARGET=$(LIBDIR)/libicsall.$(SHLIB_EXT)
+ifeq ($(posixos),darwin)
+  SHLIB_COMPAT_TARGET=$(LIBDIR)/libicsall.so
+  SHLIB_INSTALL_NAME=-Wl,-install_name,@rpath/$(notdir $(SHLIB_TARGET))
+else
+  SHLIB_COMPAT_TARGET=
+  SHLIB_INSTALL_NAME=
+endif
+
+TARGETS=$(BINDIR)/ics $(LIBDIR)/libics.a $(BINDIR)/ics.byte $(LIBDIR)/ics.cmxa $(SHLIB_TARGET) $(SHLIB_COMPAT_TARGET)
+
+.PHONY : all all-chdir
+all: $(OBJDIR) $(LIBDIR) $(BINDIR) $(INCDIR) $(ICSAT)
+	$(MAKE) -C chameleon all
+	$(MAKE) -C $(OBJDIR) -f ../../Makefile all-chdir
+
+all-chdir:$(TARGETS)
+	@echo 
+	@echo ICS Build complete
+	@echo 
+
+
+TOPCMO = $(CMO) main.cmo
+TOPCMI = $(CMI) 
+
+TOPCMX = $(TOPCMO:.cmo=.cmx)
+
+ifeq ($(MAKELEVEL),1)
+$(BINDIR)/ics: $(COBJS) $(TOPCMI) $(TOPCMX) $(ICSAT)
+	$(OCAMLOPT) -cc $(CXX) $(OFLAGS) -o $@ $(CMXA) $(TOPCMX) $(COBJS) \
+        $(LDFLAGS_WITH_CCLIB) -ccopt "$(MINUS_L_LIBS)" $(LIBS) $(ICSAT)
+else
+ics: $(OBJDIR) # $(ICSAT)
+	make -C $(OBJDIR) -f ../../Makefile ics
+endif
+
+ifeq ($(MAKELEVEL),1)
+$(BINDIR)/ics.byte: $(COBJS) $(TOPCMI) $(TOPCMO)
+	$(OCAMLC) -cc $(CXX) -I +unix -I $(OCAML_NUMDIR) -g -custom -o $@ $(CMA) $(TOPCMO) \
+                    $(COBJS) $(LDFLAGS_WITH_CCLIB) -ccopt "$(MINUS_L_LIBS)" $(LIBS) $(ICSAT)
+else
+ics.byte: $(OBJDIR)
+	make -C $(OBJDIR) -f ../../Makefile ics.byte
+endif
+
+
+ics_all.o: $(CMX)
+	$(OCAMLOPT) $(OFLAGS) -output-obj -o $@ $(CMXA) $(CMX)
+
+
+### Building Libraries ###
+
+$(LIBDIR)/libics.a: $(OBJS)
+	$(CXX) -r -o $@ $(OBJS) $(ICSAT) \
+        $(OCAMLLIBS) \
+        $(LDFLAGS) $(LIBS) $(MINUS_L_LIBS) \
+	$(OCAMLSTDLIB)/libasmrun.a
+
+$(LIBDIR)/ics.cmxa: $(OBJS) $(ICSAT) $(LISPERROROBJ)
+	(set -e; cd $(OBJDIR); \
+	 $(OCAMLMKLIB) -I +unix -I $(OCAML_NUMDIR) -custom -linkall -o ics $(CMX) $(CMXALIB_OBJS) $(SATDIR)/obj/$(ARCH)/*.o \
+	               $(LIBS_WITH_CCLIB) $(MINUS_L_LIBS_WITH_CCLIB) $(LDFLAGS_WITH_CCLIB) $(LDFLAGS_WITH_LDOPT) \
+	               -cclib -licsat $(CXXSTDLIB_WITH_CCLIB) $(CXXSTDLIB_WITH_LDOPT); \
+         cp ics.cmxa ics.cmi ics.a $(LIBDIR); \
+	 cp $(ICSAT) $(LIBDIR)/libicsat.a)
+
+                   # For use with Lisp everything, including error function, has to be included
+$(SHLIB_TARGET): $(OBJS) $(ICSAT) $(LISPERROROBJ)
+	$(CXX) $(SHLIB_LDFLAGS) $(SHLIB_INSTALL_NAME) -o $@ $(OBJS) \
+          $(OCAMLLIBS) \
+          $(LDFLAGS) \
+	  $(LIBS) \
+	  $(MINUS_L_LIBS) \
+          $(ICSAT) \
+          $(LISPERROROBJ) \
+          $(OCAMLSTDLIB)/libasmrun.a
+
+ifeq ($(posixos),darwin)
+$(LIBDIR)/libicsall.so: $(SHLIB_TARGET)
+	ln -sf $(notdir $<) $@
+endif
+
+ics_stub.c ics.h ics.lisp: ics.ml ics.mli ../../chameleon/$(ARCH)/chameleon
+	../../chameleon/$(ARCH)/chameleon ics.ml
+	cp ics.h $(INCDIR)
+	cp ics.lisp $(INCDIR)
+
+
+$(OBJDIR)/icsversion.o: $(OBJDIR)/icsversion.c
+	$(CC) -c -DBUILDDATE='"$(shell date)"' \
+               -DVERSION='"$(VERSION)"' \
+               -DARCHITECTURE='"$(ARCH)"' \
+               -DDEBUG=$(DEBUG) \
+               -DCOMPILATION_FLAGS='"$(OFLAGS)"'  \
+               $(CPPFLAGS) -I $(OCAMLSTDLIB) -o $@  $<
+
+GENERATED = lexer.ml parser.mli parser.ml
+
+
+### building the SAT solver ###
+
+$(ICSAT) : 
+	@(cd $(SATDIR); $(MAKE))
+
+
+### Directories ###
+
+$(BINDIR):	
+	-umask 022; if test '!' -d $(BINDIR) ; then \
+                      mkdir -p $(BINDIR); fi;
+
+$(OBJDIR):
+	-umask 022; if test '!' -d $(OBJDIR) ; then \
+           mkdir -p $(OBJDIR); fi; 
+
+$(LIBDIR):
+	-umask 022; if test '!' -d $(LIBDIR) ; then \
+           mkdir -p $(LIBDIR); fi;
+
+$(INCDIR):
+	-umask 022; if test '!' -d $(INCDIR) ; then \
+           mkdir -p $(INCDIR); fi;
+
+### Source file links
+
+.PRECIOUS : $(OBJDIR)/%.ml $(OBJDIR)/%.mli $(OBJDIR)/%.mly 
+.PRECIOUS : $(OBJDIR)/%.mll $(OBJDIR)/%.c
+
+$(OBJDIR)/%.ml: $(SRCDIR)/%.ml
+	@(cd $(OBJDIR) ; ln -sf $(SRCDIR)/$(@F) .)
+
+$(OBJDIR)/%.mli: $(SRCDIR)/%.mli
+	@(cd $(OBJDIR) ; ln -sf $(SRCDIR)/$(@F) .)
+
+$(OBJDIR)/%.mly: $(SRCDIR)/%.mly
+	@(cd $(OBJDIR) ; ln -sf $(SRCDIR)/$(@F) .)
+
+$(OBJDIR)/%.mll: $(SRCDIR)/%.mll
+	@(cd $(OBJDIR) ; ln -sf $(SRCDIR)/$(@F) .)
+
+$(OBJDIR)/%.c: $(SRCDIR)/%.c
+	@(cd $(OBJDIR) ; ln -sf $(SRCDIR)/$(@F) .)
+
+
+
+
+### Documention
+
+DOCUMENTATION= $(DOCDIR)/doc.ps.gz $(DOCDIR)/doc.pdf $(DOCDIR)/api.tex $(DOCDIR)/dep.ps 
+
+doc: $(DOCUMENTATION)
+
+$(DOCDIR)/doc.dvi: $(DOCDIR)/dep.ps $(DOCDIR)/doc.tex $(DOCDIR)/api.tex
+	(cd $(DOCDIR); \
+         latex ./doc.tex && latex ./doc.tex)
+
+$(DOCDIR)/dep.ps: $(SRCML)
+	(cd src; $(OCAMLDEP) -native *.ml *.mli | ocamldot | dot -Tps > ../doc/dep.ps)
+
+$(DOCDIR)/api.tex: $(SRCDIR)/ics.mli
+	(cd $(OBJDIR); \
+	$(OCAMLDOC) -latex -noheader -notrailer -o ../../doc/api.tex ics.mli)
+
+$(DOCDIR)/doc.pdf: $(DOCDIR)/dep.ps $(DOCDIR)/doc.tex
+	(cd $(DOCDIR); pdflatex ./doc.tex  && pdflatex ./doc.tex)
+
+$(DOCDIR)/doc.ps:  $(DOCDIR)/doc.dvi $(DOCDIR)/dep.ps $(DOCDIR)/doc.tex
+	(cd $(DOCDIR); dvips ./doc.dvi -o doc.ps)
+
+$(DOCDIR)/doc.ps.gz:  $(DOCDIR)/doc.ps
+	gzip -f $(DOCDIR)/doc.ps
+
+$(DOCDIR)/doc.pdf:  $(DOCDIR)/dep.ps $(DOCDIR)/doc.tex
+
+$(DOCDIR)/dep.gif: $(DOCDIR)/dep.ps
+
+
+### Literate Programming
+
+DOCSOURCES = $(CORECMO:.cmo=.mli) $(CORECMO:.cmo=.ml)
+
+.PHONY: html man
+
+html:
+	(cd $(OBJDIR); \
+	$(OCAMLDOC) -html -all-params -keep-code -sort -colorize-code -d /homes/ruess/ics/doc/html $(DOCSOURCES))
+
+man:
+	(cd $(OBJDIR); \
+	$(OCAMLDOC) -man -all-params -keep-code -sort -colorize-code -d /homes/ruess/ics/man $(DOCSOURCES))
+
+
+
+### Emacs tags
+
+tags:
+	find . -name "*.ml*" | sort -r | xargs \
+        etags "--regex=/let[ \t]+\([^ \t]+\)/\1/" \
+              "--regex=/let[ \t]+rec[ \t]+\([^ \t]+\)/\1/" \
+              "--regex=/and[ \t]+\([^ \t]+\)/\1/" \
+              "--regex=/type[ \t]+\([^ \t]+\)/\1/" \
+              "--regex=/exception[ \t]+\([^ \t]+\)/\1/" \
+              "--regex=/val[ \t]+\([^ \t]+\)/\1/" \
+              "--regex=/module[ \t]+\([^ \t]+\)/\1/"
+
+### Generic rules
+
+.SUFFIXES: .ml .mli .cmi .cmo .cmx .mll .mly .prof .tex .dvi .ps .gif .pdf
+
+.tex.dvi:
+	latex $< && latex $<
+
+.dvi.ps: 
+	dvips $< -o $@
+
+.ps.gif: 
+	pstogif $< -o $@
+
+.tex.pdf:
+	pdflatex $< && pdflatex $<
+
+.c.o:
+	$(OCAMLC) -c -ccopt "$(CPPFLAGS) -o $@"  $<
+
+.mli.cmi:
+	$(OCAMLC) $(BFLAGS) -c $<
+
+.ml.cmo:
+	$(OCAMLC) $(BFLAGS) -c $<
+
+.ml.cmx:
+	$(OCAMLOPT) $(OFLAGS) -c $<
+
+.mll.ml:
+	$(OCAMLLEX) $<
+
+.mll.mli:
+	$(OCAMLLEX) $<
+
+.mly.ml:
+	$(OCAMLYACC) $<
+
+.mly.mli:
+	$(OCAMLYACC) $<
+
+.ml.prof:
+	ocamlprof $< > $@
+
+.PHONY: clean
+
+clean::
+	rm -f config.cache config.log confdefs.h config.status
+	rm -f gmon.out
+	rm -rf profile.out
+	rm -f $(BINDIR)/ics $(BINDIR)/ics.byte 
+	rm -f $(LIBDIR)/*
+	rm -f $(INCDIR)/*
+	rm -rf $(SRCDIR)/parser.output
+	rm -rf $(SRCDIR)/lexer.ml
+	rm -rf $(SRCDIR)/parser.ml
+	rm -rf $(SRCDIR)/parser.mli
+	rm -rf obj/*  lib/* bin/*
+	rm -f $(DOCDIR)/*.aux  $(DOCDIR)/*.toc
+	rm -f $(DOCDIR)/api.tex
+	rm -f $(DOCDIR)/*.bbl $(DOCDIR)/*.log $(DOCDIR)/*.haux $(DOCDIR)/*.dvi
+	make -C chameleon clean
+	rm -f $(DOCDIR)/*.ppm $(DOCDIR)/*.blg $(DOCDIR)/*.brf $(DOCDIR)/*.out 
+	rm -rf $(DOCDIR)/html/*
+	@(cd sat; $(MAKE) clean)
+
+
+### Installation ###
+
+install:
+	mkdir -p $(bindir)
+	mkdir -p $(libdir)
+	mkdir -p $(includedir)
+	cp $(BINDIR)/ics $(bindir)
+	cp $(LIBDIR)/* $(libdir)
+	cp $(OBJDIR)/ics.h $(includedir)
+        # mkdir -p $(OCAMLSTDLIB)/ics
+        # cp $(ICSAT) $(OCAMLSTDLIB)/ics/libicsat.a
+
+uninstall:
+	rm -f $(bindir)/ics
+	rm -f $(libdir)/libics.*
+	rm -f $(includedir)/ics.h
+
+
+### Dependencies ###
+
+
+# Static dependencies for the generated files.
+
+lexer.ml:  lexer.mll
+
+lexer.cmi: lexer.ml
+	$(OCAMLC) -c lexer.ml
+
+parser.mli parser.ml: parser.mly
+
+.depend: $(SRCML)
+	$(OCAMLDEP) *.mli *.ml main.ml > .depend
+
+
+ifeq ($(MAKELEVEL),1)
+-include .depend
+endif
+
+
+### Binary distribution ###
+
+ICS_DIST_DIR="ics-$(VERSION)"
+ICS_DIST_TAR="ics-$(VERSION)-bin-$(ARCH).tar.gz"
+
+.PHONY: binary-distribution
+
+binary-distribution: 
+	@ echo "Building ICS binary distribution..."
+	@ rm -r -f $(ICS_DIST_DIR)
+	@ mkdir $(ICS_DIST_DIR)
+	@ mkdir $(ICS_DIST_DIR)/bin
+	@ mkdir $(ICS_DIST_DIR)/lib
+	@ mkdir $(ICS_DIST_DIR)/include
+	@ mkdir $(ICS_DIST_DIR)/doc
+	@ mkdir $(ICS_DIST_DIR)/examples
+	@ cp install.sh $(ICS_DIST_DIR)/
+	@ chmod +x $(ICS_DIST_DIR)/install.sh
+	@ cp ics.template $(ICS_DIST_DIR)/bin
+	@ cp bin/$(ARCH)/ics $(ICS_DIST_DIR)/bin/ics.exec
+	@ cp bin/$(ARCH)/ics.byte $(ICS_DIST_DIR)/bin
+	@ cp lib/$(ARCH)/* $(ICS_DIST_DIR)/lib
+	@ cp include/* $(ICS_DIST_DIR)/include
+	@ if cp doc/*.ps.gz $(ICS_DIST_DIR)/doc; then echo "PS copied with success"; else echo "******* DOCUMENTATION IS MISSING ********"; fi
+	@ if cp doc/*.pdf $(ICS_DIST_DIR)/doc; then echo "PDF copied with success"; else echo "******* DOCUMENTATION IS MISSING ********"; fi
+	@ cp BIN-INSTALL $(ICS_DIST_DIR)/INSTALL
+	@ cp BIN-README $(ICS_DIST_DIR)/README
+	@ if test -d examples; then cp examples/demo.ics $(ICS_DIST_DIR)/examples; else echo "*************** EXAMPLES ARE MISSING ***************"; fi
+	@ rm -f $(ICS_DIST_TAR)
+	@ echo "Building TAR ball..."
+	@ tar -cvzf $(ICS_DIST_TAR) $(ICS_DIST_DIR)
+
+
+# Source Distribution
+
+ICS_SRC_TAR="ics-$(VERSION).tar.gz"
+
+source-distribution:
+	@ echo "Building ICS source distribution..."
+	@ rm -r -f $(ICS_DIST_DIR)	
+	@ mkdir $(ICS_DIST_DIR)
+	@ (tar -cvz --file=$(ICS_SRC_TAR) \
+                  --mode="u+rw" \
+                  ./README ./Makefile.in ./configure ./configure.in \
+                  ./config.guess \
+                  ./ics-mode.el \
+                  ./ics.in \
+                  ./chameleon/Makefile.in \
+                  ./chameleon/src/chameleon.ml \
+                  ./chameleon/src/mli_lexer.mll \
+                  ./chameleon/src/mli_parser.mly \
+                  ./chameleon/src/mli_types.mli \
+                  ./$(DOCDIR)/doc.ps.gz  ./$(DOCDIR)/doc.pdf \
+                  ./sat/Makefile.in \
+                  ./sat/src/*.cpp \
+	          ./sat/src/*.h \
+                  ./sat/src/Makefile.in \
+                  ./sat/lib/ \
+                  ./src/*.c \
+                  ./src/parser.mly \
+                  ./src/lexer.mll \
+                  ./src/main.ml \
+                  ./$(SRCML) \
+	          ./$(SRCMLI))
+	@ echo "Finished building " $(ICS_SRC_TAR) 
